@@ -104,7 +104,7 @@ textarea.input{resize:vertical;min-height:78px}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 .field-row.three{grid-template-columns:1fr 1fr 1fr}
 .inline-add{display:flex;gap:8px;align-items:flex-end}.inline-add .field{flex:1;margin-bottom:0}
-#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);z-index:200;background:var(--noche);color:var(--vainilla);padding:14px 22px;border-radius:30px;font-size:14.5px;font-weight:500;box-shadow:var(--sombra-fuerte);opacity:0;transition:all .3s;display:flex;align-items:center;gap:9px;max-width:90vw}
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);z-index:2000;background:var(--noche);color:var(--vainilla);padding:14px 22px;border-radius:30px;font-size:14.5px;font-weight:500;box-shadow:var(--sombra-fuerte);opacity:0;transition:all .3s;display:flex;align-items:center;gap:9px;max-width:90vw}
 #toast.show{transform:translateX(-50%) translateY(0);opacity:1}#toast svg{width:18px;height:18px;flex-shrink:0}
 .role-screen{position:fixed;inset:0;z-index:300;background:var(--noche);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;text-align:center;color:var(--vainilla);overflow-y:auto}
 .role-screen .logo{display:flex;flex-direction:column;align-items:center;gap:16px;margin-bottom:36px}
@@ -210,6 +210,7 @@ textarea.input{resize:vertical;min-height:78px}
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
 <script>
 /* =====================================================================
@@ -934,7 +935,8 @@ function vReportes(c){
   const ingresos=ventas+ingExtra; const utilidad=ingresos-egresos;
   const labels={hoy:'Hoy',semana:'Últimos 7 días',quincena:'Últimos 15 días',mes:'Últimos 30 días'};
   const tabs=['hoy','semana','quincena','mes'].map(p=>`<button class="cat-tab ${estado.periodo===p?'active':''}" onclick="estado.periodo='${p}';render()">${({hoy:'Día',semana:'Semanal',quincena:'Quincenal',mes:'Mensual'})[p]}</button>`).join('');
-  c.innerHTML = head('Reportes', labels[estado.periodo]+' · '+ini.toLocaleDateString('es-MX',{day:'numeric',month:'short'})+' – '+fin.toLocaleDateString('es-MX',{day:'numeric',month:'short'}));
+  c.innerHTML = head('Reportes', labels[estado.periodo]+' · '+ini.toLocaleDateString('es-MX',{day:'numeric',month:'short'})+' – '+fin.toLocaleDateString('es-MX',{day:'numeric',month:'short'}),
+    `<button class="btn btn-ghost" onclick="exportarReporteExcel()">${svg(I.download,18)}Exportar a Excel</button>`);
   c.innerHTML += `<div class="cat-tabs" style="margin-bottom:22px">${tabs}</div>`;
   c.innerHTML += `<div class="metric-row">
     <div class="metric"><div class="lbl">Ventas</div><div class="val money">${num(ventas)}</div></div>
@@ -1009,9 +1011,15 @@ function vAjustes(c){
   const datos=document.createElement('div'); datos.className='card';
   datos.innerHTML=`<h2 style="font-family:var(--display);font-size:19px;margin-bottom:8px">Datos</h2>
     <p class="hint" style="margin-bottom:16px">Respaldo manual de toda la información (útil aunque uses sincronización).</p>
-    <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="exportar()">${svg(I.download,18)}Exportar respaldo</button><button class="btn btn-ghost" onclick="$('#fileImport').click()">${svg(I.upload,18)}Importar respaldo</button><button class="btn btn-ghost" style="color:var(--peligro);border-color:var(--peligro)" onclick="resetTodo()">${svg(I.trash,18)}Borrar todo</button></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap"><button class="btn btn-ghost" onclick="exportar()">${svg(I.download,18)}Exportar respaldo (JSON)</button><button class="btn btn-ghost" onclick="$('#fileImport').click()">${svg(I.upload,18)}Importar respaldo</button><button class="btn btn-ghost" style="color:var(--peligro);border-color:var(--peligro)" onclick="resetTodo()">${svg(I.trash,18)}Borrar todo</button></div>
     <input type="file" id="fileImport" accept="application/json" class="hidden" onchange="importar(this)">`;
   c.appendChild(datos);
+  const excelCard=document.createElement('div'); excelCard.className='card'; excelCard.style.marginTop='18px';
+  excelCard.innerHTML=`<h2 style="font-family:var(--display);font-size:19px;margin-bottom:8px">Exportar a Excel</h2>
+    <p class="hint" style="margin-bottom:16px">Descarga tus datos en un archivo .xlsx con una hoja para cada cosa: Órdenes, Detalle de ventas (por platillo), Inventario, Menú con costeo, Movimientos de caja y Cortes de caja. Ábrelo en Excel, Google Sheets o Numbers.</p>
+    <button class="btn btn-barro" onclick="exportarExcelCompleto()">${svg(I.download,18)}Descargar Excel completo</button>
+    <div class="hint" style="margin-top:10px">Para exportar solo un periodo (semana, quincena, mes) usa el botón "Exportar a Excel" dentro de Reportes.</div>`;
+  c.appendChild(excelCard);
 }
 function pintarMesas(){
   const box=$('#mesasBox'); if(!box) return; const mesas=DB.data.ajustes.mesas;
@@ -1038,6 +1046,77 @@ function probarTicket(){
   DB.data.ordenes.push(demo); imprimirTicket('demo'); DB.data.ordenes=DB.data.ordenes.filter(x=>x.id!=='demo'); persistLocal();
 }
 function borrarMesa(i){ DB.data.ajustes.mesas.splice(i,1); saveAjustes(); pintarMesas(); }
+/* =====================================================================
+   EXPORTACIÓN A EXCEL (.xlsx)
+   ===================================================================== */
+function excelListo(){
+  if(typeof XLSX==='undefined'){ toast('No se pudo cargar el módulo de Excel. Revisa tu conexión e intenta de nuevo.','peligro'); return false; }
+  return true;
+}
+function hoja(wb,nombre,filas){
+  const ws=XLSX.utils.json_to_sheet(filas.length?filas:[{}]);
+  XLSX.utils.book_append_sheet(wb, ws, nombre.slice(0,31));
+}
+function exportarExcelCompleto(){
+  if(!excelListo()) return;
+  const d=DB.data; const wb=XLSX.utils.book_new();
+
+  const ordenesRows=d.ordenes.filter(o=>o.estado==='pagada'||o.estado==='cancelada').map(o=>({
+    Folio:o.folio, Fecha:new Date(o.pagada||o.cancelada||o.creada).toLocaleString('es-MX'),
+    Mesa:o.mesa||'', Mesero:o.mesero||'', Estado:o.estado==='pagada'?'Pagada':'Cancelada',
+    Personas:o.comensales||'', Subtotal:o.subtotal??'', Descuento:o.descuento||0, Propina:o.propina||0,
+    Total:o.total??'', FormaPago:o.formaPago||'', Cortesia:o.cortesia?'Sí':'No', Nota:o.nota||'', MotivoCancelacion:o.motivoCancel||''
+  }));
+  hoja(wb,'Órdenes',ordenesRows);
+
+  const detalleRows=[];
+  d.ordenes.filter(o=>o.estado==='pagada').forEach(o=>{ o.items.forEach(it=>{
+    detalleRows.push({ Folio:o.folio, Fecha:new Date(o.pagada||o.creada).toLocaleString('es-MX'), Mesa:o.mesa||'',
+      Platillo:it.nombre, Cantidad:it.cantidad, PrecioUnitario:it.precio, Importe:+(it.precio*it.cantidad).toFixed(2), Notas:(it.mods||[]).join(', ') }); }); });
+  hoja(wb,'Detalle de ventas',detalleRows);
+
+  const invRows=d.inventario.map(i=>({ Insumo:i.nombre, Unidad:i.unidad||'', Existencia:i.stock||0, StockMinimo:i.stockMin||0,
+    CostoPorUnidad:i.costo||0, ValorEnInventario:+((i.stock||0)*(i.costo||0)).toFixed(2) }));
+  hoja(wb,'Inventario',invRows);
+
+  const menuRows=d.menu.map(m=>{ const cat=d.categorias.find(c=>c.id===m.categoriaId); const costo=costoPlatillo(m);
+    const margen=m.precio>0&&costo>0?Math.round((m.precio-costo)/m.precio*100):'';
+    return { Platillo:m.nombre, Categoria:cat?cat.nombre:'Sin categoría', Precio:m.precio, CostoInsumos:costo>0?+costo.toFixed(2):'', MargenPct:margen, Activo:m.activo!==false?'Sí':'No' }; });
+  hoja(wb,'Menú',menuRows);
+
+  const movRows=d.movimientos.map(m=>({ Fecha:new Date(m.fecha).toLocaleString('es-MX'), Tipo:m.tipo==='ingreso'?'Ingreso':'Egreso',
+    Concepto:m.concepto, Categoria:m.categoria||'', Monto:m.monto, Efectivo:m.efectivo===false?'No':'Sí' }));
+  hoja(wb,'Movimientos de caja',movRows);
+
+  const cajaRows=d.cajas.map(c=>({ Apertura:new Date(c.aperturaFecha).toLocaleString('es-MX'), AbrióPor:c.aperturaPor||'',
+    Cierre:new Date(c.cierreFecha).toLocaleString('es-MX'), CerróPor:c.cierrePor||'', FondoInicial:c.fondoInicial,
+    Ventas:c.ventas, IngresosEfectivo:c.ingresosEfectivo, Egresos:c.egresos, Esperado:c.esperado, Contado:c.contado, Diferencia:c.diferencia }));
+  hoja(wb,'Cortes de caja',cajaRows);
+
+  XLSX.writeFile(wb, 'cima-cafe-datos-'+hoy()+'.xlsx');
+  toast('Excel descargado');
+}
+function exportarReporteExcel(){
+  if(!excelListo()) return;
+  const d=DB.data; const [ini,fin]=rangoPeriodo(estado.periodo);
+  const enRango=fch=>{ const t=new Date(fch); return t>=ini&&t<=fin; };
+  const pagadas=d.ordenes.filter(o=>o.estado==='pagada'&&o.pagada&&enRango(o.pagada));
+  const movs=d.movimientos.filter(m=>enRango(m.fecha));
+  const wb=XLSX.utils.book_new();
+
+  hoja(wb,'Órdenes del periodo', pagadas.map(o=>({ Folio:o.folio, Fecha:new Date(o.pagada).toLocaleString('es-MX'), Mesa:o.mesa||'',
+    Mesero:o.mesero||'', Subtotal:o.subtotal??'', Descuento:o.descuento||0, Propina:o.propina||0, Total:o.total??'', FormaPago:o.formaPago||'', Cortesia:o.cortesia?'Sí':'No' })));
+
+  const conteo={}; pagadas.forEach(o=>o.items.forEach(it=>{ conteo[it.nombre]=(conteo[it.nombre]||0)+it.cantidad; }));
+  hoja(wb,'Platillos vendidos', Object.entries(conteo).sort((a,b)=>b[1]-a[1]).map(([nombre,cant])=>({ Platillo:nombre, CantidadVendida:cant })));
+
+  hoja(wb,'Movimientos', movs.map(m=>({ Fecha:new Date(m.fecha).toLocaleString('es-MX'), Tipo:m.tipo==='ingreso'?'Ingreso':'Egreso',
+    Concepto:m.concepto, Categoria:m.categoria||'', Monto:m.monto })));
+
+  const labels={hoy:'dia',semana:'semanal',quincena:'quincenal',mes:'mensual'};
+  XLSX.writeFile(wb, 'cima-cafe-reporte-'+(labels[estado.periodo]||'periodo')+'-'+hoy()+'.xlsx');
+  toast('Reporte descargado en Excel');
+}
 function exportar(){ const blob=new Blob([JSON.stringify(DB.data,null,2)],{type:'application/json'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='cima-cafe-respaldo-'+hoy()+'.json'; a.click(); toast('Respaldo descargado'); }
 function importar(input){ const f=input.files[0]; if(!f) return; const r=new FileReader();
   r.onload=e=>{ try{ DB.data=JSON.parse(e.target.result); persistLocal(); if(fbReady()) subirTodoAFirebase(); render(); construirNav(); toast('Datos importados'); }catch(err){ toast('Archivo inválido','peligro'); } }; r.readAsText(f); }
@@ -1143,6 +1222,11 @@ function getConfig(){
   return null;
 }
 function initFirebase(cfg){
+  if(typeof firebase==='undefined'){
+    toast('No se pudo cargar Firebase. Revisa tu conexión a internet e intenta de nuevo.','peligro');
+    console.error('El SDK de Firebase no cargó (window.firebase es undefined). Puede ser un bloqueo de red hacia gstatic.com.');
+    return false;
+  }
   try{
     if(!firebase.apps.length) firebase.initializeApp(cfg);
     db=firebase.firestore(); auth=firebase.auth();
@@ -1187,11 +1271,29 @@ function abrirConfigSync(){
       <div class="field"><label>Configuración (firebaseConfig)</label><textarea class="input" id="fbCfg" style="min-height:150px;font-family:var(--font-mono,monospace);font-size:13px" placeholder='{\n  "apiKey": "...",\n  "authDomain": "tu-proyecto.firebaseapp.com",\n  "projectId": "tu-proyecto",\n  "storageBucket": "...",\n  "messagingSenderId": "...",\n  "appId": "..."\n}'>${actual?JSON.stringify(actual,null,2):''}</textarea></div>
       <div class="hint">Tras guardar, inicia sesión con la cuenta de tu restaurante (creada en Firebase → Authentication).</div>`,
     guardarTexto:'Guardar y conectar',
-    guardar:()=>{ let cfg; try{ let txt=$('#fbCfg').value.trim(); txt=txt.replace(/^const\s+firebaseConfig\s*=\s*/,'').replace(/;?\s*$/,''); cfg=JSON.parse(txt.replace(/(\w+):/g,'"$1":').replace(/'/g,'"').replace(/""/g,'"')); }
-      catch(e){ try{ cfg=JSON.parse($('#fbCfg').value); }catch(e2){ toast('No pude leer la config. Pégala completa.','peligro'); return; } }
-      if(!cfg.projectId||!cfg.apiKey){ toast('Falta projectId o apiKey','peligro'); return; }
+    guardar:()=>{
+      const raw=$('#fbCfg').value.trim();
+      if(!raw){ toast('Pega primero tu configuración de Firebase','peligro'); return; }
+      let cfg=null, errores=[];
+      // Intento 1: JSON válido tal cual (por si ya viene con comillas en las llaves)
+      try{ cfg=JSON.parse(raw); }catch(e){ errores.push('JSON directo: '+e.message); }
+      // Intento 2: objeto de JavaScript (const firebaseConfig = { apiKey: "...", ... };)
+      // Se evalúa como literal de objeto real, sin tocar el contenido de los valores,
+      // así el appId (que trae dos puntos adentro, ej. "1:123:web:abc") no se corrompe.
+      if(!cfg){
+        try{
+          let txt=raw.replace(/^\s*(const|let|var)\s+\w+\s*=\s*/,'').replace(/;?\s*$/,'');
+          const obj=(new Function('return ('+txt+')'))();
+          if(obj && typeof obj==='object') cfg=obj;
+        }catch(e){ errores.push('Objeto JS: '+e.message); }
+      }
+      if(!cfg){ toast('No pude leer la configuración. Revisa que esté completa y sin cortar.','peligro'); console.error('Config Firebase — no se pudo interpretar:', errores); return; }
+      if(!cfg.projectId||!cfg.apiKey){ toast('Falta projectId o apiKey en la configuración','peligro'); return; }
       localStorage.setItem('cima_fb_config', JSON.stringify(cfg)); FIREBASE_CONFIG=cfg;
-      cerrarModal(); if(initFirebase(cfg)){ setTimeout(abrirLogin, 400); } } });
+      cerrarModal();
+      if(initFirebase(cfg)){ toast('Conectando…'); setTimeout(abrirLogin, 500); }
+      else { toast('No se pudo iniciar Firebase con esos datos','peligro'); }
+    } });
 }
 function abrirLogin(){
   if(!auth){ toast('Primero configura Firebase','peligro'); return; }
