@@ -2,7 +2,7 @@
    Cachea la app para que abra sin internet. Los datos se sincronizan
    con Firebase cuando hay conexión (Firestore maneja el offline solo). */
 
-const CACHE = 'cima-cafe-v5';
+const CACHE = 'cima-cafe-v6';
 const ASSETS = [
   './',
   './index.html',
