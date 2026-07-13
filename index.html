@@ -1267,7 +1267,7 @@ function afterSync(){
 function abrirConfigSync(){
   const actual=getConfig();
   modal({ wide:true, titulo:'Configurar sincronización',
-    cuerpo:`<p class="hint" style="margin-bottom:14px">Pega aquí la configuración de tu proyecto Firebase (la encuentras en la consola de Firebase → Configuración del proyecto). Revisa la guía incluida para crear el proyecto paso a paso.</p>
+    cuerpo:`<p class="hint" style="margin-bottom:14px">Pega aquí la configuración de tu proyecto Firebase. Puedes pegar el bloque completo tal como te lo muestra Firebase (con los <code>import</code>, comentarios, etc.) — el sistema encuentra solo la parte que necesita, no hace falta recortar nada.</p>
       <div class="field"><label>Configuración (firebaseConfig)</label><textarea class="input" id="fbCfg" style="min-height:150px;font-family:var(--font-mono,monospace);font-size:13px" placeholder='{\n  "apiKey": "...",\n  "authDomain": "tu-proyecto.firebaseapp.com",\n  "projectId": "tu-proyecto",\n  "storageBucket": "...",\n  "messagingSenderId": "...",\n  "appId": "..."\n}'>${actual?JSON.stringify(actual,null,2):''}</textarea></div>
       <div class="hint">Tras guardar, inicia sesión con la cuenta de tu restaurante (creada en Firebase → Authentication).</div>`,
     guardarTexto:'Guardar y conectar',
@@ -1277,15 +1277,36 @@ function abrirConfigSync(){
       let cfg=null, errores=[];
       // Intento 1: JSON válido tal cual (por si ya viene con comillas en las llaves)
       try{ cfg=JSON.parse(raw); }catch(e){ errores.push('JSON directo: '+e.message); }
-      // Intento 2: objeto de JavaScript (const firebaseConfig = { apiKey: "...", ... };)
-      // Se evalúa como literal de objeto real, sin tocar el contenido de los valores,
-      // así el appId (que trae dos puntos adentro, ej. "1:123:web:abc") no se corrompe.
+      // Intento 2: extraer solo el objeto { ... } de firebaseConfig, ignorando todo lo demás
+      // (imports, comentarios, initializeApp, getAnalytics, etc. que Firebase agrega alrededor).
+      // Cuenta llaves respetando comillas para hallar el cierre exacto del objeto.
+      if(!cfg){
+        try{
+          const marca=raw.indexOf('firebaseConfig');
+          let ini=raw.indexOf('{', marca>=0?marca:0);
+          if(ini<0) ini=raw.indexOf('{');
+          if(ini>=0){
+            let depth=0, enStr=false, strCh='', esc=false, fin=-1;
+            for(let i=ini;i<raw.length;i++){
+              const ch=raw[i];
+              if(enStr){ if(esc) esc=false; else if(ch==='\\') esc=true; else if(ch===strCh) enStr=false; }
+              else{
+                if(ch==='"'||ch==="'"||ch==='`'){ enStr=true; strCh=ch; }
+                else if(ch==='{') depth++;
+                else if(ch==='}'){ depth--; if(depth===0){ fin=i+1; break; } }
+              }
+            }
+            if(fin>0){ const obj=(new Function('return ('+raw.slice(ini,fin)+')'))(); if(obj&&typeof obj==='object') cfg=obj; }
+          }
+        }catch(e){ errores.push('Extracción de objeto: '+e.message); }
+      }
+      // Intento 3: todo el texto es un literal de objeto de JS (const firebaseConfig = {...};) sin nada más alrededor
       if(!cfg){
         try{
           let txt=raw.replace(/^\s*(const|let|var)\s+\w+\s*=\s*/,'').replace(/;?\s*$/,'');
           const obj=(new Function('return ('+txt+')'))();
           if(obj && typeof obj==='object') cfg=obj;
-        }catch(e){ errores.push('Objeto JS: '+e.message); }
+        }catch(e){ errores.push('Objeto JS completo: '+e.message); }
       }
       if(!cfg){ toast('No pude leer la configuración. Revisa que esté completa y sin cortar.','peligro'); console.error('Config Firebase — no se pudo interpretar:', errores); return; }
       if(!cfg.projectId||!cfg.apiKey){ toast('Falta projectId o apiKey en la configuración','peligro'); return; }
